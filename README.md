@@ -58,15 +58,43 @@ python3 scripts/daq_unified_updated.py
 - **[VIVADO_CLOCK_FIX.md](documentation/VIVADO_CLOCK_FIX.md)** - Vivado block diagram guide
 - **[ACTION_ITEMS.md](documentation/ACTION_ITEMS.md)** - Current priorities
 
+## Acknowledgments and Credits
+
+This project builds upon and references work from the following repositories:
+
+### Base Libraries and Tools
+
+- **rfsoc_sam** by University of Strathclyde  
+  https://github.com/strath-sdr/rfsoc_sam  
+  Used for: FPGA overlay interface and spectrum analyzer functionality
+
+- **RHINO DAQ** by RHINO Experiment Team  
+  https://github.com/RHINO-Experiment/rhino-daq  
+  Used for: Data acquisition pipeline architecture and network transmission
+
+### Original Contributions
+
+The following components were developed specifically for this thesis:
+- Unified acquisition system (`scripts/Daq_unified_updated.py`)
+- Polyphase Filter Bank implementation (`scripts/Daq_pfb.py`)
+- DAC tone generation for calibration
+- Comprehensive documentation and guides
+- Vivado block diagram design
+
 ## References
 
 1. Price, D.C. (2016). "Spectrometers and Polyphase Filterbanks in Radio Astronomy." arXiv:1607.03579
 2. Bull et al. (2024). "RHINO: A large horn antenna for detecting the 21cm global signal." arXiv:2410.00076
+3. University of Strathclyde. rfsoc_sam library. https://github.com/strath-sdr/rfsoc_sam
+4. RHINO Experiment. rhino-daq. https://github.com/RHINO-Experiment/rhino-daq
 
 ## License
 
-This project is part of an MSc thesis at the University of Manchester.
+This project is part of an MSc thesis at the University of Manchester. Components derived from other repositories maintain their original licenses.
 
 ## Contact
 
-mbatshi.mbulawa@postgrad.manchester.ac.uk
+For questions about this work:  
+Mbatshi Jerry Junior Mbulawa  
+Email: mbatshi.mbulawa@postgrad.manchester.ac.uk  
+Supervisor: Dr. Phil Bull
