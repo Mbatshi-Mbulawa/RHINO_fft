@@ -7,8 +7,6 @@
 
 ## Summary of Supervisor Requirements
 
-From the Slack conversation (Feb 25, 9 PM onwards):
-
 ### Priority 1: Server/Client and Vivado (This Week)
 - Get server/client transmission working
 - Apply Vlad's clock fix to Vivado block diagram
