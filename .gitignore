@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Data files (don't commit large files)
+*.npy
+*.npz
+*.dat
+*.bin
+*.h5
+*.hdf5
+
+# Vivado
+*.jou
+*.log
+*.xpr.lock
+.Xil/
+*.cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Large outputs
+outputs/*.bit
+outputs/*.hwh
