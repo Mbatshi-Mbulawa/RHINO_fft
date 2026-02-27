@@ -269,18 +269,4 @@ Your supervisor said: *"The stuff Vlad was saying about the mixing I dont think 
 
 ---
 
-## Questions to Ask on Friday
-
-1. **Do we want to change ADC sample rate to 3.2 GHz for cleaner decimation math?**
-   - 3.2 GHz / 16 = 200 MSPS exactly
-   - vs 4915.2 MHz / 16 = 307.2 MSPS (current)
-
-2. **Do we need clock domain crossing FIFO, or is everything on ADC clock OK?**
-
-3. **Priority: Vivado bitstream vs PFB in Python?**
-   - Supervisor 1: Focus on Vivado + server/client
-   - Supervisor 2: "PFB without decimation"
-
----
-
 **End of Document**
