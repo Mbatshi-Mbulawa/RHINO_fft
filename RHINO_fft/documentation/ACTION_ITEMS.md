@@ -4,7 +4,6 @@
 **Author:** Mbatshi Jerry Junior Mbulawa
 
 ---
-
 ## Summary of Supervisor Requirements
 
 ### Priority 1: Server/Client and Vivado (This Week)
