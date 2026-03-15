@@ -100,3 +100,7 @@ Generate multiple equally-spaced tones (frequency comb).
 3. **`ACTION_ITEMS.md`** — This summary
 
 All requirements addressed!
+
+## ACTION ITEMS
+1. FREQ CONE ON BOARD
+2. A script that does absolute calibratio wuth 
