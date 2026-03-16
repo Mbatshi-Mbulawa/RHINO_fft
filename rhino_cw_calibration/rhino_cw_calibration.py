@@ -31,7 +31,13 @@
 #   must be set to (1228.8 + F) MHz. This is the DDC offset formula.
 # - The active ADC channel for the ADC_A SMA connector is channel_22.
 #   (Tile 224, ADC 0). Confirmed with 89.6 dB SNR in Session 1.
-# - ADC sample rate after decimation: 200 MSPS.
+# - ADC hardware sample rate: 4915.2 MSPS (set by the RFSoC tile PLL).
+#   rfsoc_sam does NOT apply decimation — it runs the ADC at full rate.
+#   The DDC shifts the band of interest down in frequency but does NOT
+#   reduce the output sample rate seen by Python.
+#   IMPORTANT: The 16x decimation to 200 MSPS is a feature of the CUSTOM
+#   system_overlay bitstream (not yet deployed — blocked on licence),
+#   NOT of rfsoc_sam. Do not confuse the two.
 # - Noise floor: approximately -107.2 dBFS.
 #
 # HOW TO RUN
@@ -66,11 +72,20 @@ except ImportError:
 # All DAC frequencies must be offset by this amount.
 DDC_OFFSET_MHZ = 1228.8
 
-# ADC output sample rate in Hz after 16x decimation inside rfsoc_sam.
-ADC_FS_HZ = 200e6   # 200 MSPS
+# ADC hardware sample rate in Hz when using rfsoc_sam.
+# rfsoc_sam does NOT decimate — the ADC tile runs at its full hardware rate
+# of 4915.2 MSPS. The DDC shifts the band of interest down in frequency
+# but the output sample rate remains at 4915.2 MSPS.
+# NOTE: 16x decimation to 200 MSPS is a feature of the CUSTOM system_overlay
+# bitstream (not yet deployed), NOT rfsoc_sam. The value below is used only
+# for computing the FFT bin spacing of the rfsoc_sam internal spectrum.
+# rfsoc_sam reports its spectrum over the DDC output bandwidth — confirm
+# the exact bandwidth from the overlay documentation if bin spacing matters.
+ADC_FS_HZ = 4915.2e6   # 4915.2 MSPS — full hardware rate under rfsoc_sam
 
 # FFT length used by rfsoc_sam internally.
-# Bin spacing = ADC_FS_HZ / N_FFT = 200e6 / 4096 ≈ 48.8 kHz
+# Bin spacing = ADC_FS_HZ / N_FFT = 4915.2e6 / 4096 ≈ 1.2 MHz under rfsoc_sam.
+# (Under the custom system_overlay with 16x decimation: 200e6 / 4096 ≈ 48.8 kHz)
 N_FFT = 4096
 
 # CW sweep range (MHz). Jordan specified 50–200 MHz.
