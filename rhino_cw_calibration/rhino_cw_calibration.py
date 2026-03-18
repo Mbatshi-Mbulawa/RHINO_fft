@@ -178,6 +178,61 @@ def capture_spectrum(n_frames=N_FRAMES):
         spectrum[peak_bin] = -20.0 # simulated tone ay -20 dBFS
         return spectrum, freqs_mhz
 
+    # Set spectrum type to 'log' - this gives clean dBFS values.
+    # IMPORTANT:  'power' is misleadingly named in rfsoc_sam; it gives dBFS 
+    # but zeros out the DC bin. 'log' is te correct choice for SNR work.
+    _receiver.spectrum_type = 'log'
+
+    # Collect n_frames spectra and accumulate 
+    frames = []
+    for _ in range(n_frames):
+        frames.append(np.array(_receiver.spectrum))
+
+    # Average in linear power domain (not dBFS) for correct averaging.
+    # Step 1: convert dBFS  to linear power
+    frames_linear = [10.0 ** (f/ 10.0) for f in frames]
+    # Step 2 : average
+    mean_linear = np.mean(frames_linear, axis=0)
+    # Step 3: convert back to dBFS
+    spectrum_dbfs = 10.0 * np.log10(mean_linear)
+
+    # Build frequency axis: bin k = k * bin_spacing_MHz 
+    n_bins = len(spectrum_dbfs)
+    freqs_mhz = np.arange(n_bins) * (ADC_FS_HZ / N_FFT) / 1e6
+
+    return spectrum_dbfs, freqs_mhz
+
+
+def find_peak(spectrum_dbfs, freqs_mhz, target_mhz, search_window_mhz=5.0):
+    """
+    Find the peak bin power near target_mhz in the spectrum.
+
+    Parameters
+    ----------
+    spectrum_dbfs  : np.ndarray - IQ power spectrum in dBFS
+    freqs_mhz : np.ndarray - frequency axis in MHz
+    target_mhz : float - expected peak location (MHz)
+    search_window_mhz : float - total window width in MHz (default 5.0)
+
+    Returns
+    -------
+    peak_power_dbfs : float - peak bin power (dBFS), or NaN if not found
+    peak_freq_mhz : float - peak bin frequency (MHz), or NaN if not found
+    """
+
+    # Find bin indices within the search window
+    mask = np.abs(freqs_mhz - target_mhz) <= (search_window_mhz / 2.0)
+
+    if not np.any(mask):
+        #No bins in window - return NaN and flag this in the log
+        return np.nan, np.nan
+    
+    # Find the maximum power bin within the window
+    sub_spectrum = spectrum_dbfs[mask]
+    sub_freqs = freqs_mhz[mask]
+    peak_idx = np.argmax(sub_spectrum)
+
+    return float(sub_spectrum[peak_idx]), float(sub_freqs[peak_idx])
 
 
 # =============================================================================
@@ -185,7 +240,42 @@ def capture_spectrum(n_frames=N_FRAMES):
 # Saves all measurements to disk. Independent of both other layers.
 # =============================================================================
 
- 
+def save_results(sweep_freqs, peak_powers, peak_freqs, noise_floor,
+                 meta):
+    """
+    Save sweep results to npz (numpy) and .csv formats.
+    
+    Parameters
+    ----------
+    sweep_freqs : list of float - target frequencies (MHz)
+    peak_powers : list of float - measured peak power at each step (dBFS)
+    peak_freqs : list of float - actual measured peak frequency (MHz)
+    noise_floor : float - mean noise floor (dBFS)
+    meta : dict - experiment metadata (amplitude, n_frames, etc.)
+    """
+
+    # Save as numpy archive (.npz) - easy to reload for analysis
+    np.savez(OUTPUT_NPZ,
+             sweep_freqs=np.array(sweep_freqs),
+             peak_powers=np.array(peak_powers),
+             peak_freqs=np.array(peak_freqs),
+             noise_floor=np.array([noise_floor]))
+    print(f"[INFO] Results saved to {OUTPUT_NPZ}")
+
+    # Also save as CSV for easy inspection in a spreadsheet
+    with open(OUTPUT_CSV, 'w', newline='') as f:
+        writer = csv.writer(f)
+        # Write metadata as comments at the top
+        for k, v in meta.items():
+            writer.writerow([f"# {k}", v])
+        writer.writerow(["target_freq_mhz", "peak_power_dbfs",
+                         "peak_freq_mhz", "snr_db"])
+        
+        for sf, pp, pf in zip(sweep_freqs, peak_powers, peak_freqs):
+            snr = pp - noise_floor if not np.isnan(pp) else np.nan
+            writer.writerow([f"{sf:.4f}", f"{pp:.2f}",
+                             f"{pf:.4f}", f"{snr:.2f}"])
+    print(f"[INFO] Results saved to {OUTPUT_CSV}")
 
 # ============================================================================= 
 # MEASUREMENT FUNCTIONS
@@ -193,18 +283,395 @@ def capture_spectrum(n_frames=N_FRAMES):
 # but do not depend on each other.
 # =============================================================================
 
+def measure_switching_speed(n_trials=20):
+    """
+    MEASUREMENT 1 : NCO Switching Speed Characterisation
+    
+    Method:
+    - Set DAC to f1 = 75 MHz in ADC spectrum
+    - Issue command to switch to f2 = 100 MHz
+    - Poll ADC spectrum every 10 ms; record time until stable pea at f2
+    - Repeat n_trials times to get a distribution
+    
+    Returns
+    -------
+    switch_times_s ; np.ndarray
+        Array of measured switching times in seconds.
+    """
+    print("\n" + '='*60)
+    print( "MEASUREMENT 1 : NCP Switching Speed")
+    print('='*60)
+
+    # These are TARGET PEAK frequencies in the ADC spectrum.
+    # set_tone() applies the 2x correction internally for both.
+    #f1=75MHz -> DAC NCO = 75/2 + 1228.8 = 1266.3 MHz
+    #f2=100MHz -> DAC NCO = 100/2 + 1228.8 = 1278.8 MHz
+    f1_mhz = 75.0
+    f2_mhz = 100.0
+    switch_times = []
+
+    for trial in range(n_trials):
+        # Step 1: set to f1 and let it settle
+        set_tone(f1_mhz)
+        time.sleep(0.5) # generous initial settle
+
+        #Step 2 : issue the frequency change and start the clock
+        t_start = time.perf_counter()
+        set_tone(f2_mhz, amplitude=DAC_AMPLITUDE)
+
+        # Step 3 : poll until peak at f2 appears and is stable
+        # "Stable" = three consecutive frames with peak within 2 dB of
+        # the expected value (use the first good reading as the reference)
+        stable_count = 0
+        reference_power = None
+        t_switch = None
 
 
 
+        for _ in range(200): 
+             spectrum, freqs = capture_spectrum(n_frames=1)
+             peak_pwr, peak_frq = find_peak(spectrum, freqs, f2_mhz)
 
+             if np.isnan(peak_pwr):
+                time.sleep(0.01)
+                continue
+
+             if reference_power is None:
+                 reference_power = peak_pwr
+
+            # Check if within 2 dB of reference
+             if abs(peak_pwr - reference_power) < 2.0:
+                 stable_count +=1
+             else:
+                 stable_count = 0
+                 reference_power = peak_pwr # reset reference
+        
+             if stable_count >= 3:
+                 t_switch = time.perf_counter() - t_start
+                 break
+
+             time.sleep(0.01) # 10 ms between polls
+
+        if t_switch is None:
+            print(f" Trial {trial+1:3d}: TIMEOUT (> 2 s)")
+        else: 
+            switch_times.append(t_switch)
+            print(f" Trial {trial+1:3d}: {t_switch*1000:.1f} ms")
+
+    switch_times = np.array(switch_times)
+    if len(switch_times) > 0:
+        print(f"\n Switching time: mean={switch_times.mean()*1000:.1f} ms "
+              f"max={switch_times.max()*1000:.1f} ms "
+              f"min={switch_times.min()*1000:.1f} ms")
+        print(f" Recommended DAC_SETTLE_TIME_S: {switch_times.max()*1.5:.3f} s")
+    else:
+        print(" [WARNING] All trials timed out. Check hardware connection")
+
+    disable_tone()
+    return switch_times
+
+def measure_noise_floor(duration_s=60.0, sample_interval_s=5.0):
+    """
+    MEASUREMENT 4: Noise Floor Stability 
+    """
+    print("\n" + "="*60)
+    print("MEASUREMENT 4: Noise Floor Stability")
+    print(f"Duration: {duration_s:.0f} s, sampling every {sample_interval_s:.0f} s")
+    print("="*60)
+    
+    disable_tone()  # ensure DAC is off
+
+    noise_readings = []
+    t_start = time.time()
+
+    # Science band: 60-85 MHz
+    science_band_start = 60.0
+    science_band_stop = 85.0
+
+    while time.time() - t_start < duration_s:
+        elapsed = time.time() - t_start
+        spectrum, freqs = capture_spectrum(n_frames=N_FRAMES)
+
+        # Extract noise floor within the science band only
+        mask = (freqs >= science_band_start) & (freqs <= science_band_stop)
+        band_noise = np.mean(spectrum[mask])
+        noise_readings.append(band_noise)
+
+        print(f" t={elapsed:5.1f}s noise floor (60-85 MHz): {band_noise:.2f} dBFS")
+        time.sleep(sample_interval_s)
+
+    noise_over_time = np.array(noise_readings)
+    mean_noise = float(np.mean(noise_over_time))
+    drift = float(np.ptp(noise_over_time)) # peak-to-peak variation
+
+    print(f"\n Mean noise floor: {mean_noise:.2f} dBFS")
+    print(f" Peak-to-peak drift: {drift:.2f} dB")
+    if drift > 1.0:
+        print(" [WARNING] Noise floor drift > 1dB. Consider thermal stabilisation")
+    else:
+        print("[OK] Noise floor is stable.")
+
+    return mean_noise, noise_over_time
+
+def measure_amplitude_linearity(freq_target_mhz=75.0, n_steps=10):
+    """
+    MEASUREMENT 3: Amplitude Linearity
+ 
+    Sweeps DAC amplitude from 0.1 to 1.0 at a fixed target peak frequency
+    and records the ADC IQ peak power at each step.
+
+    Returns
+    -------
+    amplitudes  : np.ndarray — normalised amplitude values tested
+    peak_powers : np.ndarray — measured IQ peak power at each amplitude (dBFS)
+    """
+    print("\n" + "="*60)
+    print(f"MEASUREMENT 3: IQ Amplitude Linearity")
+    print(f"Target peak: {freq_target_mhz:.1f} MHz  "
+          f"(DAC NCO = {DDC_NCO_MHZ + freq_target_mhz/2:.1f} MHz)")
+    print("="*60)
+ 
+    amplitudes  = np.linspace(0.1, 1.0, n_steps)
+    peak_powers = []
+ 
+    for amp in amplitudes:
+        set_tone(freq_target_mhz, amplitude=amp)
+        spectrum, freqs = capture_spectrum(n_frames=N_FRAMES)
+        peak_pwr, peak_frq = find_peak(spectrum, freqs, freq_target_mhz)
+        peak_powers.append(peak_pwr)
+        print(f"  amplitude={amp:.2f}  peak={peak_pwr:.2f} dBFS  "
+              f"at {peak_frq:.3f} MHz")
+ 
+    amplitudes  = np.array(amplitudes)
+    peak_powers = np.array(peak_powers)
+ 
+    # Check linearity: for a linear system, a doubling of amplitude (x2)
+    # should give +6.02 dB. We fit a line to (20*log10(amplitude), peak_power)
+    # and check the slope is close to 1.0.
+    log_amp = 20.0 * np.log10(amplitudes)
+    valid = ~np.isnan(peak_powers)
+    if np.sum(valid) > 2:
+        slope, intercept = np.polyfit(log_amp[valid], peak_powers[valid], 1)
+        print(f"\n  Linearity slope: {slope:.4f} (ideal = 1.000)")
+        if abs(slope - 1.0) < 0.05:
+            print("  [OK] System is linear within 5%.")
+        else:
+            print("  [WARNING] Non-linearity detected. Check for ADC clipping.")
+ 
+    disable_tone()
+    return amplitudes, peak_powers
+ 
+ 
+def run_gain_curve_sweep(settle_time_s=None):
+    """
+    MEASUREMENT 2: Main Gain Curve Sweep
+ 
+    Sweeps the CW tone from SWEEP_START_MHZ to SWEEP_STOP_MHZ, recording
+    the IQ peak power at each target frequency.
+
+    """
+    if settle_time_s is None:
+        settle_time_s = DAC_SETTLE_TIME_S
+ 
+    print("\n" + "="*60)
+    print("MEASUREMENT 2: IQ Gain Curve Sweep")
+    print(f"Target range : {SWEEP_START_MHZ}–{SWEEP_STOP_MHZ} MHz  "
+          f"Step: {SWEEP_STEP_MHZ:.4f} MHz")
+    print(f"DAC NCO range: "
+          f"{DDC_NCO_MHZ + SWEEP_START_MHZ/2:.1f}–"
+          f"{DDC_NCO_MHZ + SWEEP_STOP_MHZ/2:.1f} MHz  "
+          f"(2x correction applied)")
+    print(f"Frames/step  : {N_FRAMES}  Settle: {settle_time_s:.3f} s")
+    print("="*60)
+ 
+    # Step 1: Measure noise floor before sweep (DAC off)
+    print("\n[Step 1/3] Measuring IQ noise floor (DAC off)...")
+    disable_tone()
+    spectrum_noise, freqs = capture_spectrum(n_frames=N_FRAMES * 2)
+    noise_floor_dbfs = float(np.mean(spectrum_noise))
+    print(f"  IQ noise floor: {noise_floor_dbfs:.2f} dBFS")
+ 
+    # Step 2: Build target frequency list.
+    # These are TARGET PEAK frequencies in the ADC spectrum.
+    # set_tone() handles the 2x correction internally — no manual adjustment needed.
+    n_steps_total  = int((SWEEP_STOP_MHZ - SWEEP_START_MHZ) / SWEEP_STEP_MHZ) + 1
+    sweep_freqs_mhz = np.linspace(SWEEP_START_MHZ, SWEEP_STOP_MHZ, n_steps_total)
+ 
+    print(f"\n[Step 2/3] Sweeping {len(sweep_freqs_mhz)} frequency steps...")
+ 
+    peak_powers   = []
+    peak_freqs    = []
+    t_sweep_start = time.time()
+ 
+    for i, f_mhz in enumerate(sweep_freqs_mhz):
+        # set_tone applies: DAC NCO = DDC_NCO_MHZ + f_mhz/2
+        # Peak will appear at f_mhz MHz in the IQ spectrum
+        set_tone(f_mhz, amplitude=DAC_AMPLITUDE)
+        time.sleep(settle_time_s)
+ 
+        spectrum, freqs = capture_spectrum(n_frames=N_FRAMES)
+        peak_pwr, peak_frq = find_peak(spectrum, freqs, f_mhz)
+        peak_powers.append(peak_pwr)
+        peak_freqs.append(peak_frq)
+ 
+        snr = peak_pwr - noise_floor_dbfs if not np.isnan(peak_pwr) else np.nan
+ 
+        if i % 10 == 0 or i == len(sweep_freqs_mhz) - 1:
+            elapsed   = time.time() - t_sweep_start
+            remaining = elapsed / (i + 1) * (len(sweep_freqs_mhz) - i - 1)
+            print(f"  [{i+1:4d}/{len(sweep_freqs_mhz)}] "
+                  f"target={f_mhz:7.3f} MHz  "
+                  f"DAC_NCO={DDC_NCO_MHZ + f_mhz/2:.2f} MHz  "
+                  f"peak={peak_pwr:7.2f} dBFS  "
+                  f"SNR={snr:6.1f} dB  "
+                  f"ETA: {remaining:.0f}s")
+ 
+    disable_tone()
+    print(f"\n  Sweep complete in {time.time()-t_sweep_start:.1f} s")
+ 
+    # Step 3: Save results
+    print("\n[Step 3/3] Saving results...")
+    meta = {
+        "date"            : time.strftime("%Y-%m-%d %H:%M:%S"),
+        "overlay"         : "rfsoc_sam DDC mode — IQ output",
+        "ddc_nco_mhz"     : DDC_NCO_MHZ,
+        "image_correction": "2x: f_DAC = DDC_NCO + f_target/2",
+        "power_type"      : "IQ power = I^2 + Q^2",
+        "sweep_start_mhz" : SWEEP_START_MHZ,
+        "sweep_stop_mhz"  : SWEEP_STOP_MHZ,
+        "sweep_step_mhz"  : SWEEP_STEP_MHZ,
+        "n_frames"        : N_FRAMES,
+        "dac_amplitude"   : DAC_AMPLITUDE,
+        "settle_time_s"   : settle_time_s,
+        "noise_floor_dbfs": noise_floor_dbfs,
+        "adc_fs_mhz"      : ADC_FS_HZ / 1e6,
+        "n_fft"           : N_FFT,
+    }
+    save_results(list(sweep_freqs_mhz), peak_powers, peak_freqs,
+                 noise_floor_dbfs, meta)
+ 
+    return list(sweep_freqs_mhz), peak_powers, peak_freqs, noise_floor_dbfs
+ 
 # =============================================================================
 # PLOTTING
 # =============================================================================
 
+def plot_gain_curve(sweep_freqs, peak_powers, noise_floor_dbfs):
+    """
+    Plot the gain curve: ADC peak power vs Frequency
+    Also marks the science band (60-85 MHz) with a shaded region
 
+    Saves the plot to OUTPUT_PLOT and displays it if running interactively
+    """
 
+    sweep_freqs = np.array(sweep_freqs)
+    peak_powers = np.array(peak_powers)
+    valid = ~np.isnan(peak_powers)
 
+    fig, axes = plt.subplots(2, 1, figsize=(12, 8))
+    fig.suptitle("RHINO RFSoC 4x2 - CW Calibration IQ Gain Curve\n"
+                 f"rfsoc_sam DDC mode | IQ power (I^2 + Q^2)  |"
+                 f"DAC NCO = {DDC_NCO_MHZ} + f_target/2 |"
+                 f" Amplitude= {DAC_AMPLITUDE:.2f} | N_frames={N_FRAMES}",
+                 fontsize=10)
+    
+    # Top panel: full sweep (50-200 MHz)
+    ax = axes[0]
+    ax.plot(sweep_freqs[valid], peak_powers[valid],
+            color='steelblue', linewidth=0.8, label='IQ peak power (dBFS)')
+    ax.axhline(noise_floor_dbfs, color='grey', linestyle='--',
+               linewidth=0.8, label=f'IQ noise floor ({noise_floor_dbfs:.1f} dBFS)')
+    ax.axvspan(60, 85, alpha=0.15, color='green', label=' Science band (60-85 MHz)')
+    ax.set_xlabel('Target frequency (MHz)')
+    ax.set_ylabel('IQ Peak Power (dBFS)')
+    ax.set_title(f'Full Sweep: {SWEEP_START_MHZ}-{SWEEP_STOP_MHZ} MHz')
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(SWEEP_START_MHZ, SWEEP_STOP_MHZ)
 
+     # Bottom panel: science band zoom (60–85 MHz)
+    ax2 = axes[1]
+    mask_sci = (sweep_freqs >= 60) & (sweep_freqs <= 85) & valid
+    if np.any(mask_sci):
+        ax2.plot(sweep_freqs[mask_sci], peak_powers[mask_sci],
+                 color='green', linewidth=1.0, label='IQ peak power (dBFS)')
+        ax2.axhline(noise_floor_dbfs, color='grey', linestyle='--',
+                    linewidth=0.8, label=f'IQ noise floor ({noise_floor_dbfs:.1f} dBFS)')
+        ax2.axvline(72.5, color='orange', linestyle=':', linewidth=1.0,
+                    label='Science band centre (72.5 MHz)')
+        ax2.axvline(75.0, color='red', linestyle=':', linewidth=1.0,
+                    label='21cm target (75 MHz)')
+        ax2.set_xlabel('Target frequency (MHz)')
+        ax2.set_ylabel('IQ Peak Power (dBFS)')
+        ax2.set_title('Science Band Zoom: 60–85 MHz')
+        ax2.legend(fontsize=8)
+        ax2.grid(True, alpha=0.3)
+        ax2.set_xlim(60, 85)
+ 
+    plt.tight_layout()
+    plt.savefig(OUTPUT_PLOT, dpi=150, bbox_inches='tight')
+    print(f"[INFO] Gain curve plot saved to {OUTPUT_PLOT}")
+    plt.show()
+ 
 # =============================================================================
 # MAIN ENTRY POINT
 # =============================================================================
+
+def main():
+    """
+    Run the full CW calibration experiment in sequence:
+    1. Initialise hardware
+    2. Measure NCO switching speed (Measurement 1)
+    3. Measure noise floor stability (measurement 4)
+    4. Measire amplitude linearity at 75MHz (Measurement 3)
+    5. Run full gain curve sweep 50-200 MHz (Measurement 2)
+    6. Plot results
+    """
+    print("=" * 60)
+    print("RHINO RFSoC 4x2 - CW Calibration Experiment")
+    print("University of Manchester / Jodrell Bank Observatory")
+    print(f"Start time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print("=" * 60)
+    print("Platform: rfsoc-sam DDC mode")
+    print("ADC output: IQ (complex) - always, fixed by bitstream")
+    print(f"2x image correction: f_DAC = {DDC_NCO_MHZ} + f_target/2 MHz")
+    print("=" * 60)
+
+    # Initialize hardware (loads overlay, gets channel handles)
+    initialise_hardware()
+
+    # Measurement 1 : Switching speed
+    # Run this first to know the correct settle time for the sweep.
+    switch_times = measure_switching_speed(n_trails=10)
+    if len(switch_times) > 0:
+        # Use 1.5x the maximum measured switching time as the settle time
+        recommended_settle = float(switch_times.max()*1.5)
+        print(f"\n[INFO] Setting DAC_SETTLE_TIME_S = {recommended_settle:.3f} s "
+              f"based on switching speed measurement.")
+    else:
+        recommended_settle = DAC_SETTLE_TIME_S
+        print(f"\n[WARNING] Using default settle time: { DAC_SETTLE_TIME_S} s ")
+    
+    # Measurement 4: Noise floor stability (60 seconds)
+    noise_mean, noise_over_time = measure_noise_floor(
+        duration_s=60.0, sample_interval_s=10.0)
+    
+    # Measurement 3: Amplitude Linearity
+    amplitudes, amp_powers = measure_amplitude_linearity(
+        freq_target_mhz=75.0, n_steps=10)
+    
+    # Measurement 2: Full gain curve sweep
+    sweep_freqs, peak_powers, peak_freqs, noise_floor = run_gain_curve_sweep(
+        settle_time_s=recommended_settle)
+    
+    # Plot results
+    plot_gain_curve(sweep_freqs, peak_powers, noise_floor)
+
+    print("\n" + "=" * 60)
+    print("Experiment complete.")
+    print(f"Results saved to : {OUTPUT_NPZ}, {OUTPUT_CSV}, {OUTPUT_PLOT}")
+    print("=" * 60)
+
+    if __name__ == "__main__":
+        main()
+
