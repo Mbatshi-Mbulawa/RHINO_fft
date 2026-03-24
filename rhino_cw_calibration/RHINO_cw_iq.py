@@ -4,7 +4,7 @@
 # RHINO RFSoC 4x2 — CW Calibration via Continuous get_frame() Averaging
 # University of Manchester / Jodrell Bank Observatory
 # Author: Mbatshi Jerry Junior Mbulawa
-# Date:   2025-05-21
+# Date:   2025-05-19
 #
 # ARCHITECTURE 
 # -----------------------------------------------------------
@@ -18,7 +18,7 @@
 #   6. Record peak power and frequency
 #   7. Optionally accumulate waterfall (time vs frequency 2D array)
 #
-# FREQUENCY RANGE 
+# FREQUENCY RANGE
 # --------------------------------------
 # DAC NCO sweeps 1.5–3.5 GHz.
 # This range is chosen because the RFSoC ZU48DR ADC has no aliasing
@@ -33,7 +33,7 @@
 #   1/32  =>  64 bins =  76.8 MHz step =>  27 steps
 #   1/64  =>  32 bins =  38.4 MHz step =>  53 steps
 #
-# WINDOW
+# WINDOW 
 # -----------------------------------
 # Rectangular window ONLY — no Hanning, no Blackman.
 # Nulls of sinc^2 fall on adjacent channel centres => no leakage
@@ -45,7 +45,7 @@
 # showing all N_BLOCKS frames at each frequency step, giving a visual
 # picture of how the spectrum evolves over the averaging window.
 #
-# HARDWARE NOTES (confirmed on board 2025-05-18)
+# HARDWARE NOTES
 # -----------------------------------------------
 # - rfsoc_sam: from rfsoc_sam.overlay import Overlay
 # - Receiver:  ol.radio.receiver.channels[3]    (channel_22, ADC_A SMA)
@@ -451,7 +451,7 @@ def run_gain_curve_sweep(settle_time_s=DAC_SETTLE_TIME_S):
             w.writerow([f"{sf:.4f}", f"{pp:.2f}", f"{pf:.3f}", f"{snr:.2f}"])
     print(f"  Saved {OUTPUT_CSV}")
 
-    return list(sweep_freqs_ghz), peak_powers, peak_freqs, noise_floor, waterfall, waterfall_freqs
+    return list(sweep_freqs_ghz), peak_powers, peak_freqs, noise_floor
 
 
 # =============================================================================
@@ -491,62 +491,110 @@ def plot_gain_curve(sweep_freqs_ghz, peak_powers, noise_floor):
 # PLOTTING — Waterfall
 # =============================================================================
 
-def plot_waterfall(waterfall, waterfall_freqs, sweep_freqs_ghz):
+def acquire_waterfall(dac_freq_ghz, n_spectra=50, n_blocks=N_BLOCKS):
     """
-    Waterfall plot: rows = time (frame index), columns = frequency.
-    Each row is one raw get_frame() call, ordered as the sweep progresses.
-    The colour shows IQ power in dBFS.
+    Acquire a waterfall at a FIXED DAC frequency.
 
-    This gives a visual picture of:
-    - How the tone appears and moves across frequency as the DAC sweeps
-    - How stable the noise floor is over time
-    - Any RFI or spurious signals that appear at fixed frequencies
+    Jordan's whiteboard (2025-05-19): the waterfall axes are
+      X = frequency (spectral channels)
+      Y = time (each row = one averaged spectrum)
+
+    The DAC is held at dac_freq_ghz throughout. Each row of the
+    output is one averaged spectrum (N_blocks frames averaged).
+    Stacking n_spectra rows gives a 2D time-vs-frequency picture
+    showing how the spectrum evolves over time at this DAC frequency.
+
+    This is useful for:
+    - Seeing the CW tone as a bright vertical stripe at a fixed frequency
+    - Measuring noise floor drift over time (1/f noise, thermal drift)
+    - Identifying RFI (bright stripes at frequencies unrelated to the tone)
+
+    Parameters
+    ----------
+    dac_freq_ghz : float  — fixed DAC NCO frequency in GHz
+    n_spectra    : int    — number of time rows (averaged spectra)
+    n_blocks     : int    — frames averaged per row
+
+    Returns
+    -------
+    wf_array  : np.ndarray[n_spectra, N_FFT]  — waterfall, dBFS
+    freqs_mhz : np.ndarray[N_FFT]             — frequency axis (DC-centred)
+    t_axis_s  : np.ndarray[n_spectra]         — time axis in seconds
     """
-    if waterfall is None or waterfall_freqs is None:
+    print(f"\n[WATERFALL] DAC fixed at {dac_freq_ghz:.3f} GHz")
+    print(f"  {n_spectra} spectra x {n_blocks} frames/spectrum")
+
+    set_tone(dac_freq_ghz, amplitude=DAC_AMPLITUDE)
+    time.sleep(DAC_SETTLE_TIME_S)
+
+    wf_array = np.zeros((n_spectra, N_FFT), dtype=np.float32)
+    t_axis_s = np.zeros(n_spectra)
+    freqs_mhz = None
+    t0 = time.time()
+
+    for i in range(n_spectra):
+        spec, freqs, _ = acquire_spectrum(n_blocks=n_blocks)
+        wf_array[i] = spec.astype(np.float32)
+        t_axis_s[i] = time.time() - t0
+        if freqs_mhz is None:
+            freqs_mhz = freqs
+        if i % 10 == 0:
+            print(f"  spectrum {i+1}/{n_spectra}  t={t_axis_s[i]:.1f}s  "
+                  f"peak={float(np.max(spec)):.2f} dBFS")
+
+    disable_tone()
+    print(f"  Waterfall complete in {time.time()-t0:.1f} s")
+    return wf_array, freqs_mhz, t_axis_s
+
+
+def plot_waterfall(wf_array, freqs_mhz, t_axis_s, dac_freq_ghz):
+    """
+    Waterfall plot with axes:
+      X = frequency (MHz, DC-centred)
+      Y = time (seconds)
+
+    This is Jordan's intended waterfall (whiteboard diagram 2025-05-19):
+    the DAC is fixed, and the spectrum is shown evolving over time.
+    The CW tone appears as a bright vertical stripe at a fixed frequency.
+    The noise floor fills the rest of the plot.
+    """
+    if wf_array is None or freqs_mhz is None:
         print("  No waterfall data to plot.")
         return
 
-    n_rows, n_cols = waterfall.shape
+    n_spectra, n_cols = wf_array.shape
+    t_total = float(t_axis_s[-1]) if len(t_axis_s) > 0 else n_spectra
 
-    # Time axis: each row = one frame; N_BLOCKS frames per step
-    time_axis = np.arange(n_rows)
-    freq_axis = waterfall_freqs  # MHz, DC-centred
-
-    fig, ax = plt.subplots(figsize=(14, 6))
+    fig, ax = plt.subplots(figsize=(14, 7))
     fig.suptitle(
         f"RHINO RFSoC 4x2 — CW Calibration Waterfall\n"
-        f"DAC swept {DAC_START_GHZ}–{DAC_STOP_GHZ} GHz | "
-        f"Each row = one get_frame() call | "
-        f"{N_BLOCKS} frames per DAC frequency step",
+        f"DAC fixed at {dac_freq_ghz:.3f} GHz | "
+        f"X = frequency | Y = time | "
+        f"{n_spectra} spectra × {N_BLOCKS} frames/spectrum | "
+        f"Rectangular window | fftshift",
         fontsize=10
     )
 
-    # Use percentile limits for colour scale so bright tones don't wash out noise
-    vmin = float(np.percentile(waterfall, 5))
-    vmax = float(np.percentile(waterfall, 99))
+    # Colour scale: use percentiles to not let the tone dominate
+    vmin = float(np.percentile(wf_array, 2))
+    vmax = float(np.percentile(wf_array, 99))
 
     im = ax.imshow(
-        waterfall,
+        wf_array,
         aspect='auto',
-        origin='lower',
-        extent=[freq_axis[0], freq_axis[-1], 0, n_rows],
+        origin='upper',           # time increases downward (conventional)
+        extent=[freqs_mhz[0], freqs_mhz[-1], t_total, 0],
         vmin=vmin, vmax=vmax,
         cmap='viridis',
         interpolation='nearest'
     )
 
-    # Mark step boundaries
-    for step_idx in range(1, N_STEPS):
-        ax.axhline(step_idx * N_BLOCKS, color='red', lw=0.5, alpha=0.4)
-
-    # Label y-axis with DAC frequency at each step boundary
-    step_rows  = [i * N_BLOCKS + N_BLOCKS // 2 for i in range(N_STEPS)]
-    step_labels = [f"{f:.2f}" for f in sweep_freqs_ghz]
-    ax.set_yticks(step_rows)
-    ax.set_yticklabels(step_labels, fontsize=7)
-
-    ax.set_xlabel('Frequency (MHz, DC-centred)')
-    ax.set_ylabel('DAC NCO (GHz)')
+    ax.set_xlabel('Frequency (MHz, DC-centred)', fontsize=12)
+    ax.set_ylabel('Time (s)', fontsize=12)
+    ax.set_title(
+        f'Time–Frequency waterfall at DAC = {dac_freq_ghz:.3f} GHz',
+        fontsize=11
+    )
     plt.colorbar(im, ax=ax, label='IQ Power (dBFS)', shrink=0.8)
     plt.tight_layout()
     plt.savefig(OUTPUT_WATERFALL, dpi=150, bbox_inches='tight')
@@ -577,13 +625,28 @@ def main():
         dac_freq_ghz=mid, n_steps=10)
 
     # M2: Gain curve sweep + waterfall
-    sweep_freqs, peak_powers, peak_freqs, nf, waterfall, wf_freqs = \
+    sweep_freqs, peak_powers, peak_freqs, nf = \
         run_gain_curve_sweep(settle_time_s=DAC_SETTLE_TIME_S)
 
-    # Plots
-    print("\nGenerating plots...")
+    # Gain curve plot
+    print("\nGenerating gain curve plot...")
     plot_gain_curve(sweep_freqs, peak_powers, nf)
-    plot_waterfall(waterfall, wf_freqs, sweep_freqs)
+
+    # Waterfall: fix DAC at band centre and watch spectrum evolve over time
+    # This is Jordan's intended waterfall (whiteboard 2025-05-19):
+    # X = frequency, Y = time — tone appears as a bright vertical stripe
+    wf_freq = (DAC_START_GHZ + DAC_STOP_GHZ) / 2.0
+    print(f"\nAcquiring waterfall at fixed DAC = {wf_freq:.3f} GHz...")
+    wf_array, wf_freqs, wf_time = acquire_waterfall(
+        dac_freq_ghz=wf_freq,
+        n_spectra=50,      # 50 time rows
+        n_blocks=N_BLOCKS  # each row = N_BLOCKS averaged frames
+    )
+    plot_waterfall(wf_array, wf_freqs, wf_time, wf_freq)
+
+    # Save waterfall data
+    np.save("rhino_cw_waterfall.npy", wf_array)
+    print("  Saved rhino_cw_waterfall.npy")
 
     print("\n" + "=" * 60)
     print("Experiment complete.")
