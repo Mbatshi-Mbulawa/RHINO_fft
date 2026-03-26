@@ -11,11 +11,11 @@
 # Produces a waterfall plot and stores the data as a numpy array.
 #
 # Axes:
-#   X axis — ADC frequency channels 
+#   X axis — ADC frequency channels (RF frequency in MHz, Jordan's convention)
 #   Y axis — time (each row = one get_frame() call)
 #   Colour — IQ power (dBFS)
 #
-# Frequency axis convention :
+# Frequency axis convention (Jordan Norris, 2025-05-21):
 #   fmin  = f_lo - (fs/2)   =  1228.8 - 2457.6 = -1228.8 MHz
 #   fmax  = f_lo + (fs/2)   =  1228.8 + 2457.6 =  3686.4 MHz
 #   freqs = np.linspace(fmin, fmax, nfft)
@@ -25,7 +25,7 @@
 # The CW tone appears as a bright vertical stripe at its true RF frequency,
 # stepping across the x-axis as the DAC NCO changes.
 #
-# Pseudocode:
+# Jordan's pseudocode (whiteboard 2025-05-21):
 #   spectre = []
 #   for i in range(n_seconds):
 #       s = acquire_spectrum
@@ -93,20 +93,20 @@ OUTPUT_PLOT     = "rhino_waterfall.png"
 # =============================================================================
 # HARDWARE CONSTANTS (fixed by rfsoc_sam bitstream — do not change)
 # =============================================================================
-NFFT   = 2048        # fixed by SpectrumAnalyser IP
-F_LO   = 1228.8      # MHz — DDC NCO, fixed by bitstream
-FS_MHZ = 4915.2      # MSPS — ADC hardware sample rate
+NFFT      = 2048        # fixed by SpectrumAnalyser IP
+N_FFT     = NFFT        # alias used in plot_waterfall
+F_LO      = 1228.8      # MHz — DDC NCO, fixed by bitstream
+FS_MHZ    = 4915.2      # MSPS — ADC hardware sample rate
+ADC_FS_HZ = FS_MHZ * 1e6  # Hz — alias used in plot_waterfall
 
 # =============================================================================
-# FREQUENCY AXIS 
+# FREQUENCY AXIS
 # =============================================================================
-# fmin = f_lo - (fs/2)
-# fmax = (fs/2) + f_lo
-# freqs = np.linspace(fmin, fmax, nfft)
+# After ifftshift is applied in get_one_frame(), bin 0 = DC = 0 MHz,
+# bin NFFT-1 = Nyquist = FS_MHZ/2.
+# X axis is therefore 0 to Nyquist (NOT fftshifted).
 
-FMIN_MHZ  = F_LO - (FS_MHZ / 2)       # -1228.8 MHz
-FMAX_MHZ  = (FS_MHZ / 2) + F_LO       #  3686.4 MHz
-FREQS_MHZ = np.linspace(FMIN_MHZ, FMAX_MHZ, NFFT)
+FREQS_MHZ = np.linspace(0.0, FS_MHZ / 2.0, NFFT)   # 0 → 2457.6 MHz
 
 # Total frames in the waterfall
 N_TOTAL_FRAMES = N_STEPS * N_FRAMES_PER_STEP
@@ -114,7 +114,7 @@ N_TOTAL_FRAMES = N_STEPS * N_FRAMES_PER_STEP
 # DAC frequencies for each step
 DAC_FREQS_GHZ = np.linspace(DAC_START_GHZ, DAC_STOP_GHZ, N_STEPS)
 
-print(f"[CONFIG] Frequency axis: {FMIN_MHZ:.1f} to {FMAX_MHZ:.1f} MHz")
+print(f"[CONFIG] Frequency axis: 0.0 to {FS_MHZ/2.0:.1f} MHz  (0 → Nyquist)")
 print(f"[CONFIG] DAC sweep:      {DAC_START_GHZ} to {DAC_STOP_GHZ} GHz  ({N_STEPS} steps)")
 print(f"[CONFIG] Frames/step:    {N_FRAMES_PER_STEP}")
 print(f"[CONFIG] Total frames:   {N_TOTAL_FRAMES}  ({N_TOTAL_FRAMES * 0.0016:.0f} s approx)")
@@ -175,7 +175,7 @@ def acquire_waterfall():
     """
     Acquire the waterfall by calling get_frame() continuously.
 
-    Follows pseudocode exactly:
+    Follows Jordan's pseudocode exactly:
         spectre = []
         for i in range(n_seconds):
             s = acquire_spectrum
@@ -192,7 +192,7 @@ def acquire_waterfall():
                 Each row is one raw get_frame() call in dBFS.
                 Rows are ordered in time from top to bottom.
     freqs_mhz : np.ndarray shape (NFFT,)
-                Frequency axis in MHz using convention:
+                Frequency axis in MHz using Jordan's convention:
                 fmin = f_lo - fs/2,  fmax = f_lo + fs/2
     dac_step_rows : list of int
                 Row index where each DAC step begins (for labelling the plot).
@@ -201,10 +201,10 @@ def acquire_waterfall():
     print("WATERFALL ACQUISITION")
     print(f"  DAC: {DAC_START_GHZ}–{DAC_STOP_GHZ} GHz  ({N_STEPS} steps)")
     print(f"  {N_FRAMES_PER_STEP} frames per step  →  {N_TOTAL_FRAMES} rows total")
-    print(f"  X axis: {FMIN_MHZ:.1f}–{FMAX_MHZ:.1f} MHz ")
+    print(f"  X axis: 0.0–{FS_MHZ/2.0:.1f} MHz  (0 → Nyquist, {NFFT} bins)")
     print("="*60)
 
-    # Pre-allocate the full array — : Spectra = np.array(spectra)
+    # Pre-allocate the full array — Jordan: Spectra = np.array(spectra)
     Spectra = np.zeros((N_TOTAL_FRAMES, NFFT), dtype=np.float32)
 
     dac_step_rows = []   # row index where each DAC step starts
@@ -219,16 +219,20 @@ def acquire_waterfall():
         # Simulation: inject a tone at the correct RF frequency bin
         if not BOARD_CONNECTED:
             # The DAC tone at f_ghz should appear at f_ghz * 1000 MHz on the
-            # frequency axis FREQS_MHZ
+            # frequency axis FREQS_MHZ (since we use Jordan's convention)
             tone_mhz    = f_ghz * 1000.0
             noise_floor = -102.0
 
         dac_step_rows.append(row)
 
-        # Capture N_FRAMES_PER_STEP frames
+        # Capture N_FRAMES_PER_STEP frames — Jordan's loop
         for frame_idx in range(N_FRAMES_PER_STEP):
             if BOARD_CONNECTED:
-                frame = np.array(_sa.get_frame(), dtype=np.float32)
+                # get_frame() returns fftshifted spectrum (DC at centre bin).
+                # Undo with ifftshift → natural order: bin 0 = DC = 0 MHz,
+                # bin 2047 = Nyquist. This gives correct 0-to-Nyquist axis.
+                raw   = np.array(_sa.get_frame(), dtype=np.float32)
+                frame = np.fft.ifftshift(raw).astype(np.float32)
             else:
                 # Synthetic frame: noise + tone at correct bin
                 frame = np.random.normal(noise_floor, 0.9, NFFT).astype(np.float32)
@@ -261,7 +265,7 @@ def acquire_waterfall():
 def save_data(Spectra, freqs_mhz):
     """
     Store waterfall and frequency axis as numpy arrays.
-    Store the data as a numpy array.
+    Jordan: store the data as a numpy array.
     """
     np.save(OUTPUT_NPY,   Spectra)
     np.save(OUTPUT_FREQS, freqs_mhz)
@@ -276,8 +280,8 @@ def save_data(Spectra, freqs_mhz):
         "nfft"            : NFFT,
         "f_lo_mhz"        : F_LO,
         "fs_mhz"          : FS_MHZ,
-        "fmin_mhz"        : FMIN_MHZ,
-        "fmax_mhz"        : FMAX_MHZ,
+        "fmin_mhz"        : 0.0,
+        "fmax_mhz"        : FS_MHZ / 2.0,
         "dac_amplitude"   : DAC_AMPLITUDE,
         "date"            : time.strftime("%Y-%m-%d %H:%M:%S"),
     }
@@ -298,30 +302,34 @@ def save_data(Spectra, freqs_mhz):
 
 def plot_waterfall(Spectra, freqs_mhz, dac_step_rows):
     """
-    Plot the waterfall using pcolormesh.
+    Plot the waterfall using pcolormesh (Jordan: imshow / pcolormesh).
 
-    X axis — RF frequency (MHz): f_lo ± fs/2
-    Y axis — time (row index, each row = one get_frame() call)
+    X axis — ADC frequency channels: 0 to Nyquist (0 to 2457.6 MHz)
+             NO fftshift — natural bin order after ifftshift in acquisition
+    Y axis — frame index (time, each row = one get_frame() call ~ 1.6 ms)
     Colour — IQ power (dBFS)
 
-    The CW tone appears as a bright vertical stripe. As the DAC steps,
-    the stripe jumps to a new frequency — visible as a horizontal
-    transition in the waterfall.
+    Red vertical lines mark the EXPECTED tone position at each DAC step
+    based on the 2x image formula:
+        raw_tone_MHz = 2 * (f_DAC_MHz - 1228.8), folded into 0-Nyquist
     """
     n_rows, n_cols = Spectra.shape
+    nyquist_mhz    = ADC_FS_HZ / 2e6   # 2457.6 MHz
+    f_nco_mhz      = 1228.8
 
-    # Row axis — just the integer row index (proportional to time)
-    rows = np.arange(n_rows)
+    # Use 0-Nyquist frequency axis (after ifftshift, bin 0 = DC = 0 MHz)
+    freq_axis = np.linspace(0.0, nyquist_mhz, n_cols)
+    rows      = np.arange(n_rows)
 
     vmin = float(np.nanpercentile(Spectra, 2))
     vmax = float(np.nanpercentile(Spectra, 99.5))
 
     fig, ax = plt.subplots(figsize=(14, 8))
 
-    # pcolormesh 
+    # pcolormesh — Jordan's preferred method
     im = ax.pcolormesh(
-        freqs_mhz,     # x: RF frequency (MHz)
-        rows,          # y: frame index (time)
+        freq_axis,   # x: 0 → Nyquist MHz
+        rows,        # y: frame index
         Spectra,
         cmap='viridis',
         vmin=vmin,
@@ -329,37 +337,50 @@ def plot_waterfall(Spectra, freqs_mhz, dac_step_rows):
         shading='auto'
     )
 
-    # Mark each DAC step boundary as a horizontal line
+    # Mark each DAC step boundary (horizontal line) + expected tone (vertical)
     for i, r in enumerate(dac_step_rows):
-        ax.axhline(r, color='red', linewidth=0.5, alpha=0.6)
-        # Label with DAC frequency on the right
+        f_dac_mhz = DAC_FREQS_GHZ[i] * 1000.0
+
+        # Expected raw tone position after 2x image formula + fold into Nyquist
+        raw_tone = 2.0 * (f_dac_mhz - f_nco_mhz)
+        while raw_tone > nyquist_mhz:
+            raw_tone = 2.0 * nyquist_mhz - raw_tone
+        while raw_tone < 0:
+            raw_tone = -raw_tone
+
+        # Horizontal line = DAC step boundary in time
+        ax.axhline(r, color='white', linewidth=0.5, alpha=0.5, linestyle='--')
+
+        # Vertical line = expected tone frequency at this step
+        ax.axvline(raw_tone, color='red', linewidth=0.6, alpha=0.5)
+
+        # Label on right edge: DAC GHz value
         ax.text(
-            freqs_mhz[-1] + 10, r + N_FRAMES_PER_STEP / 2,
-            f"{DAC_FREQS_GHZ[i]:.2f}",
-            va='center', ha='left', fontsize=6, color='red'
+            nyquist_mhz * 0.99, r + N_FRAMES_PER_STEP * 0.5,
+            f"{DAC_FREQS_GHZ[i]:.2f} GHz",
+            va='center', ha='right', fontsize=6, color='white',
+            bbox=dict(boxstyle='round,pad=0.1', facecolor='black', alpha=0.4)
         )
 
-    ax.set_xlabel('Frequency (MHz)', fontsize=12)
-    ax.set_ylabel('Frame index (time →)', fontsize=12)
+    ax.set_xlim(0, nyquist_mhz)
+    ax.set_xlabel(
+        f"ADC Frequency Channel (MHz)  "
+        f"[0 → Nyquist = {nyquist_mhz:.0f} MHz,  {N_FFT} bins,  "
+        f"bin spacing = {nyquist_mhz/N_FFT:.2f} MHz]",
+        fontsize=10
+    )
+    ax.set_ylabel('Frame index  (time →,  ΔT ≈ 1.6 ms per row)', fontsize=11)
     ax.set_title(
         f"RHINO RFSoC 4x2 — CW Waterfall\n"
-        f"X = ADC frequency channels  |  Y = time\n"
+        f"X = ADC frequency channels (0 → Nyquist)  |  Y = time\n"
         f"DAC: {DAC_START_GHZ}–{DAC_STOP_GHZ} GHz  |  "
         f"{N_FRAMES_PER_STEP} frames/step  |  "
-        f"{N_STEPS} steps  |  Amp={DAC_AMPLITUDE:.1f}",
+        f"{N_STEPS} steps  |  Amp={DAC_AMPLITUDE:.1f}  |  "
+        f"Red lines = expected tone (2× image formula)",
         fontsize=10
     )
 
-    # Secondary x-axis label showing GHz
-    ax2 = ax.twiny()
-    ax2.set_xlim(ax.get_xlim())
-    ax2_ticks = np.arange(-1000, 4000, 500)
-    ax2.set_xticks(ax2_ticks)
-    ax2.set_xticklabels([f"{t/1000:.1f}" for t in ax2_ticks], fontsize=8)
-    ax2.set_xlabel('Frequency (GHz)', fontsize=10)
-
-    cb = plt.colorbar(im, ax=ax, label='IQ Power (dBFS)', shrink=0.8)
-
+    plt.colorbar(im, ax=ax, label='IQ Power (dBFS)', shrink=0.8)
     plt.tight_layout()
     plt.savefig(OUTPUT_PLOT, dpi=150, bbox_inches='tight')
     print(f"\n  Saved {OUTPUT_PLOT}")
@@ -378,7 +399,7 @@ def main():
 
     initialise_hardware()
 
-    # Acquire:
+    # Acquire — Jordan's pseudocode:
     # spectre = []
     # for i in range(n_seconds):
     #     s = acquire_spectrum
@@ -389,7 +410,7 @@ def main():
     # Store as numpy array
     save_data(Spectra, freqs_mhz)
 
-    # Plot: imshow(spectra) / pcolormesh(spectra)
+    # Plot — Jordan: imshow(spectra) / pcolormesh(spectra)
     plot_waterfall(Spectra, freqs_mhz, dac_step_rows)
 
     print("\n" + "=" * 60)

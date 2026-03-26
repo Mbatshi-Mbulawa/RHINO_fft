@@ -948,7 +948,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-
-##
-# fmin = f_lo - (fs/2)
-# fmax = (fs/2)+f_lo
+    
