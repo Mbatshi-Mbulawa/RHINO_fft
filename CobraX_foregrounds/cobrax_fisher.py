@@ -59,10 +59,12 @@ SIGMA_LBASS              = 0.1      # [K]  — 100 mK (Zerafa et al. 2025)
 # ---- Prior widths on calibration parameters (Phil's specification) ----
 # F_prior is diagonal: entry = 1 / sigma_prior^2
 # For parameters with no prior, entry = 0.
-SIGMA_PRIOR_G408        = 0.2     # 20% prior on Haslam gain
-SIGMA_PRIOR_GCBASS      = 0.01    # 1% prior on C-BASS gain (good mult. cal.)
-SIGMA_PRIOR_TOFF_CBASS  = 1.0     # [K] prior on C-BASS offset (pending Phil)
-# Set to np.inf (=> 0 in F_prior) to remove a prior entirely.
+# Phil's instruction: try 10x tighter than previous values.
+# Previous: g_408=0.2,  g_CBASS=0.01,  T_off_CBASS=5 mK
+# Current:  g_408=0.02, g_CBASS=0.001, T_off_CBASS=0.5 mK
+SIGMA_PRIOR_G408        = 0.02     # was 0.2  — 2%   prior on Haslam gain
+SIGMA_PRIOR_GCBASS      = 0.001    # was 0.01 — 0.1% prior on C-BASS gain
+SIGMA_PRIOR_TOFF_CBASS  = 5e-4     # was 5e-3 — 0.5 mK prior on C-BASS offset
 
 # ---- Full parameter system (6 parameters) ----
 # Ordering: [g_408, g_CBASS, T_off_CBASS, T_p0, m1, m2]
