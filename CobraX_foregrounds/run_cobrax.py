@@ -22,20 +22,19 @@ from cobrax_fisher import (
     compute_parameter_uncertainties,
     plot_all_uncertainties_single_config,
     run_fisher_forecast_grid,
-    NU_0, NU_HASLAM, NU_5GHZ,
+    NU_0, NU_HASLAM, NU_CBASS, NU_LBASS, NU_5GHZ,
     T_P0_FID, BETA_FIXED, M1_FID, M2_FID,
-    G408_FID,
-    SIGMA_HASLAM, SIGMA_5GHZ,
+    G408_FID, GCBASS_FID,
+    SIGMA_HASLAM, SIGMA_5GHZ, SIGMA_LBASS,
     SIGMA_CBASS_OPTIMISTIC, SIGMA_CBASS_CONSERVATIVE,
     PARAM_LABELS_3, PARAM_NAMES_3,
 )
-T_OFFSET408_FID = 1.0   # kept for spectrum plot only — not a free parameter
-
+T_OFFSET408_FID = 1.0   # kept for spectrum plot only
 BETA_FID = BETA_FIXED
 
 print("=" * 65)
 print("  CobraX Fisher Forecast — updated per Phil (April 2026)")
-print("  800 mK Haslam noise | T_off excluded | 5 GHz anchor")
+print("  Haslam 800 mK | T_off excluded | C-BASS + L-BASS anchors")
 print("=" * 65)
 
 # =============================================================================
@@ -48,31 +47,31 @@ T_true   = temperature_spectrum(nu_arr, T_P0_FID, M1_FID, M2_FID)
 T_h_true = temperature_spectrum(NU_HASLAM, T_P0_FID, M1_FID, M2_FID)
 T_h_meas = temperature_spectrum(NU_HASLAM, T_P0_FID, M1_FID, M2_FID,
                                  g=G408_FID, T_offset=T_OFFSET408_FID)
-T_5ghz   = temperature_spectrum(NU_5GHZ, T_P0_FID, M1_FID, M2_FID)
+T_lbass  = temperature_spectrum(NU_LBASS, T_P0_FID, M1_FID, M2_FID)
+T_cbass  = temperature_spectrum(NU_CBASS, T_P0_FID, M1_FID, M2_FID)
 
 fig, ax = plt.subplots(figsize=(9, 5))
 ax.plot(nu_arr / 1e9, T_true, color='steelblue', lw=2,
         label=r'True spectrum ($g=1$)')
-ax.scatter(NU_HASLAM / 1e9, T_h_true, color='steelblue', s=60, zorder=5)
-ax.scatter(NU_HASLAM / 1e9, T_h_meas, color='firebrick', s=90, marker='*',
-           zorder=6, label=fr'Haslam meas. ($g={G408_FID}$, '
-                           fr'$\sigma=800$\,mK)')
-ax.scatter(NU_5GHZ / 1e9, T_5ghz, color='darkorange', s=120, marker='D',
-           zorder=6, label=fr'5 GHz anchor '
-                           fr'($\sigma={SIGMA_5GHZ*1e3:.1f}$\,mK, $g=1$)')
+ax.scatter(NU_HASLAM/1e9, T_h_true, color='steelblue', s=60, zorder=5)
+ax.scatter(NU_HASLAM/1e9, T_h_meas, color='firebrick', s=90, marker='*',
+           zorder=6, label=fr'Haslam 408 MHz ($g={G408_FID}$, $\sigma=800$\,mK)')
+ax.scatter(NU_LBASS/1e9,  T_lbass,  color='seagreen',  s=120, marker='s',
+           zorder=6, label=r'L-BASS 1.4 GHz (abs. cal., $\sigma=0.1$\,K)')
+ax.scatter(NU_CBASS/1e9,  T_cbass,  color='darkorange', s=120, marker='D',
+           zorder=6, label=fr'C-BASS 5 GHz (not abs. cal., $\sigma={SIGMA_5GHZ*1e3:.1f}$\,mK)')
 ax.annotate('', xy=(NU_HASLAM/1e9, T_h_meas),
             xytext=(NU_HASLAM/1e9, T_h_true),
             arrowprops=dict(arrowstyle='->', color='firebrick', lw=1.5))
-nu_lo = (1.75e9 - 0.5e9/2) / 1e9
-nu_hi = (1.75e9 + 0.5e9/2) / 1e9
+nu_lo = (1.75e9 - 0.5e9/2)/1e9
+nu_hi = (1.75e9 + 0.5e9/2)/1e9
 ax.axvspan(nu_lo, nu_hi, alpha=0.15, color='goldenrod',
            label=f'CobraX band ({nu_lo:.2f}–{nu_hi:.2f} GHz)')
 ax.set_xscale('log'); ax.set_yscale('log')
 ax.set_xlabel('Frequency  [GHz]', fontsize=13)
 ax.set_ylabel('Brightness Temperature  [K]', fontsize=13)
-ax.set_title(r'Radio sky brightness temperature spectrum'
-             '\n'
-             r'($\beta=-2.75$ fixed, $T_{\rm off}$ excl., 5\,GHz anchor)',
+ax.set_title('Radio sky brightness temperature spectrum\n'
+             r'(Haslam + L-BASS + C-BASS anchors, $\beta=-2.75$ fixed)',
              fontsize=11)
 ax.legend(fontsize=9)
 ax.grid(True, which='both', alpha=0.3)
@@ -290,6 +289,67 @@ plt.tight_layout()
 plt.savefig('task3e_cbass_noise_comparison.png', dpi=150)
 plt.close()
 print("Saved: task3e_cbass_noise_comparison.png")
+
+print("\n--- TASK 3f: Effect of L-BASS anchor on all three parameters ---")
+
+nu_sweep4  = np.linspace(0.6e9, 2.0e9, 30)
+bw_fixed   = 0.4e9
+dnu_fixed  = 25e6
+
+fig, axes4 = plt.subplots(1, 3, figsize=(14, 5))
+
+for col, (pidx, plabel) in enumerate([(0, r'$\sigma(T_{p,0})$'),
+                                       (1, r'$\sigma(m_1)$'),
+                                       (2, r'$\sigma(m_2)$')]):
+    ax = axes4[col]
+    cbass_only, lbass_only, both_anchors, no_anchors = [], [], [], []
+
+    for nu_c in nu_sweep4:
+        try:
+            F_no, _, _   = compute_fisher_matrix_3x3(nu_c, bw_fixed, dnu_fixed,
+                               include_5ghz=False, include_lbass=False)
+            F_cb, _, _   = compute_fisher_matrix_3x3(nu_c, bw_fixed, dnu_fixed,
+                               include_5ghz=True,  include_lbass=False)
+            F_lb, _, _   = compute_fisher_matrix_3x3(nu_c, bw_fixed, dnu_fixed,
+                               include_5ghz=False, include_lbass=True)
+            F_both, _, _ = compute_fisher_matrix_3x3(nu_c, bw_fixed, dnu_fixed,
+                               include_5ghz=True,  include_lbass=True)
+            s_no,   _ = compute_parameter_uncertainties(F_no)
+            s_cb,   _ = compute_parameter_uncertainties(F_cb)
+            s_lb,   _ = compute_parameter_uncertainties(F_lb)
+            s_both, _ = compute_parameter_uncertainties(F_both)
+            no_anchors.append(s_no[pidx])
+            cbass_only.append(s_cb[pidx])
+            lbass_only.append(s_lb[pidx])
+            both_anchors.append(s_both[pidx])
+        except Exception:
+            no_anchors.append(np.nan);   cbass_only.append(np.nan)
+            lbass_only.append(np.nan);   both_anchors.append(np.nan)
+
+    ax.plot(nu_sweep4/1e9, no_anchors,   'gray',      lw=1.5, ls=':',
+            label='Satellite only')
+    ax.plot(nu_sweep4/1e9, cbass_only,   'darkorange', lw=2,  ls='--',
+            label='+ C-BASS 5 GHz')
+    ax.plot(nu_sweep4/1e9, lbass_only,   'seagreen',   lw=2,  ls='-.',
+            label='+ L-BASS 1.4 GHz')
+    ax.plot(nu_sweep4/1e9, both_anchors, 'firebrick',  lw=2.5,
+            label='+ C-BASS + L-BASS')
+    ax.set_xlabel('Band centre [GHz]', fontsize=11)
+    ax.set_ylabel(plabel, fontsize=11)
+    ax.set_yscale('log')
+    ax.set_title(plabel, fontsize=11)
+    ax.legend(fontsize=8)
+    ax.grid(True, which='both', alpha=0.3)
+
+fig.suptitle(
+    'Effect of anchor data points on spectral parameter constraints\n'
+    r'(BW=400 MHz, $\sigma_{408}=800$\,mK, $\sigma_{\rm L-BASS}=0.1$\,K, '
+    r'$\sigma_{\rm C-BASS}=0.1$\,mK)',
+    fontsize=11)
+plt.tight_layout()
+plt.savefig('task3f_lbass_effect.png', dpi=150)
+plt.close()
+print("Saved: task3f_lbass_effect.png")
 
 print("\n" + "=" * 65)
 print("  All tasks complete.")
