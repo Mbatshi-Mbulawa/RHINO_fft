@@ -1,0 +1,70 @@
+#=========================================================================
+# spectro_config.yaml
+# Configuration file for rhin_spectrometer.py
+# RFSoC 4x2 / PYNQ 3.0.1 / QICK 0.2.388
+#=========================================================================
+
+observationParams:
+
+  # Total observation run time in seconds.
+  # Examples: 3600 = 1 hour, 7200 = 2 hours, 300 = 5 minutes
+  runLength: 3600
+
+  # Directory where .npy output files are saved.
+  # If storageMode is 'usb', this is appended to the USB mount point.
+  # If storageMode is 'local', this path is used directly on the board.
+  obsCachePath: "/home/xilinx/qick_data"
+
+  # Where to save data: 'usb' or 'local'
+  # 'usb'   — auto-detects mounted USB stick under /media/ubuntu, /media/xilinx, or /mnt/usb
+  # 'local' — saves directly to obsCachePath on the board's SD card
+  storageMode: "local"
+
+qick:
+
+  # QICK ADC channel to use.
+  # On RFSoC 4x2 with QICK 0.2.388:
+  #   0 = ADC_D (readout ch 0, tile 0 blk 0)  ← correct SMA port for RHINO
+  #   1 = ADC_C (readout ch 1, tile 0 blk 2)
+  adcChannel: 0
+
+  # ADC sample rate in MHz. Read from hardware automatically at runtime,
+  # but set here as a fallback / documentation value.
+  # QICK on RFSoC 4x2: 4423.68 MHz
+  fsMhz: 4423.68
+
+  # Path to QICK bitfile (.bit). Leave blank ("") to use the default
+  # bitfile already loaded on the board.
+  bitfile: ""   
+
+  # Number of output frequency channels (FFT size).
+  # Must be a power of 2.
+  # Common values:
+  #   4096  → Δf = 4423.68 MHz / 4096 = 1.080 MHz per bin
+  #   8192  → Δf = 540 kHz per bin
+  #   65536 → Δf = 67.5 kHz per bin
+  # Note: very large FFT sizes require proportionally large DDR4 captures.
+  nChannels: 4096
+
+  # Integration time per output spectrum row in seconds.
+  # nsamp = (fsMhz * 1e6 * sampleIntegrationTime) / (nChannels)  [FFT mode]
+  # nsamp = (fsMhz * 1e6 * sampleIntegrationTime) / (nChannels * nTaps)  [PFB mode]
+  # Example: 1.0 s → nsamp ≈ 1,081 buffers averaged per row (FFT mode, nChannels=4096)
+  sampleIntegrationTime: 1.0
+
+  # Spectrometer mode: 'fft' or 'pfb'
+  # 'fft' — standard windowed FFT spectrometer (faster, simpler)
+  # 'pfb' — polyphase filter bank (better spectral leakage rejection, but more complex and resource-intensive)
+  spectroMode: "fft"      
+
+  # Default window for FFT mode ( ignored if spectroMode is 'pfb')
+  appliedWindow: "hann"
+
+  # FFT mode parameters
+  fftParams:
+    appliedWindow: "hann"
+
+  # PFB mode parameters (only used if spectroMode is 'pfb')
+  pfbParams:
+    nTaps: 8
+    windowType: "hann"
