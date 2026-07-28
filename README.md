@@ -1,14 +1,16 @@
-# RHINO 21cm Global Signal Acquisition System
+# RHINO: Remote HI eNvironment Observer
+
+**21cm Global Signal Acquisition System**
 
 **Author:** Mbatshi Jerry Junior Mbulawa
 **Supervisor:** Dr. Phil Bull
-**Institution:** University of Manchester
+**Institution:** University of Manchester (MSc by Research)
 
 ---
 
 ## Project Overview
 
-This repository contains the acquisition and processing pipeline for the RHINO (Radio Hydrogen Intensity Observing for the Neutral gas) 21cm global signal experiment. The system uses the Xilinx RFSoC 4x2 board to capture, process, and analyze radio frequency spectra in the 60-85 MHz band.
+This repository contains the acquisition and processing pipeline for RHINO (Remote HI eNvironment Observer), a 21cm global signal experiment. The system uses the Xilinx RFSoC 4x2 board to capture, process, and analyze radio frequency spectra in the 60-85 MHz band.
 
 ## Features
 
@@ -101,7 +103,7 @@ The following components were developed specifically for this thesis:
 
 ## License
 
-This project is part of a PhD thesis at the University of Manchester. Components derived from other repositories maintain their original licenses.
+This project is part of an MSc by Research thesis at the University of Manchester. Components derived from other repositories maintain their original licenses.
 
 ## Contact
 
