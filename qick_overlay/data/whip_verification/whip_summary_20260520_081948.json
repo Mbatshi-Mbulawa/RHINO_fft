@@ -1,0 +1,10 @@
+{
+  "timestamp": "20260520_081948",
+  "antenna": "desk whip (no LNA)",
+  "n_frames": 300,
+  "noise_floor_db": 20.21,
+  "science_band_mean_db": 19.49,
+  "fm_band_mean_db": 18.58,
+  "fm_above_science_db": -0.92,
+  "fm_peaks_detected": 0
+}

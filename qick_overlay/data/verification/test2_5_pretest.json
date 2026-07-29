@@ -1,0 +1,30 @@
+{
+  "pretest_freq_mhz": 80.0,
+  "predicted_mhz": 80.0,
+  "aliased": false,
+  "adc_d": {
+    "label": "ADC_D pretest @ 80.0 MHz",
+    "f_output_hz": 552960000.0,
+    "peak_freq_hz": 79987500.0,
+    "peak_freq_mhz": 79.9875,
+    "peak_power_db": 134.12277727077247,
+    "noise_floor_db": 46.57469953574524,
+    "peak_snr_db": 87.54807773502723,
+    "expected_freq_hz": 80000000.0,
+    "freq_error_hz": -12500.0,
+    "rms": 814.5112646739526
+  },
+  "adc_c": {
+    "label": "ADC_C pretest @ 80.0 MHz",
+    "f_output_hz": 552960000.0,
+    "peak_freq_hz": 0.0,
+    "peak_freq_mhz": 0.0,
+    "peak_power_db": 95.97670048186657,
+    "noise_floor_db": 45.29982979021986,
+    "peak_snr_db": 50.67687069164671,
+    "expected_freq_hz": 80000000.0,
+    "freq_error_hz": -80000000.0,
+    "rms": 6.523180197021427
+  },
+  "channels_agree": false
+}

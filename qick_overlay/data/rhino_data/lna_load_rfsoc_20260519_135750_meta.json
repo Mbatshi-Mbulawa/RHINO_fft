@@ -1,0 +1,18 @@
+{
+  "obs_length_s": "3600.0",
+  "integration_time_s": "1.0",
+  "file_duration_s": "3600",
+  "fs_mhz": "4423.68",
+  "n_channels": "16384",
+  "spectrometer_mode": "fft",
+  "adc_attenuation_db": "0",
+  "fft_window": "blackman",
+  "pfb_n_taps": "4",
+  "pfb_window": "blackman",
+  "data_directory": "./rhino_data",
+  "obs_cache_path": "./obs_cache",
+  "custom_name": "lna_load",
+  "configuration": "LNA_connected_to_Load",
+  "notes": "1-hour observation with LNA connected to a 50-ohm load. Software FFT path (Outcome B \u2014 standard QICK bitfile). ADC channel 0. Attenuation 0 dB.",
+  "n_accumulations": "250"
+}

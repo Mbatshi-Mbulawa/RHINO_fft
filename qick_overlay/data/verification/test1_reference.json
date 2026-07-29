@@ -1,0 +1,10 @@
+{
+  "spur_freq_mhz": 100.1,
+  "spur_level_db": 76.00480118802365,
+  "noise_floor_db": 76.31036598145732,
+  "spur_snr_db": -0.3055647934336747,
+  "spur_drop_db": null,
+  "pass_threshold_db": 10.0,
+  "passed": null,
+  "verdict": "INCONCLUSIVE \u2014 no reference to compare against"
+}

@@ -1,0 +1,10 @@
+{
+  "spur_freq_mhz": 100.1,
+  "spur_level_db": 52.051842375726196,
+  "noise_floor_db": 51.901058126434904,
+  "spur_snr_db": 0.15078424929129142,
+  "spur_drop_db": 23.952958812297453,
+  "pass_threshold_db": 10.0,
+  "passed": true,
+  "verdict": "PASS \u2014 FM pickup via cable/antenna"
+}

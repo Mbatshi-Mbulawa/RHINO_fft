@@ -1,0 +1,52 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# RHINO RFSoC Observation Configuration
+# Mirrors the structure of Jordan's rhino-daq/obs_config.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+
+observationParams:
+
+  # ── Timing ─────────────────────────────────────────────────────────────────
+  obs_length_s: 3600           # Total observation duration [seconds]
+                               # 3600 = 1 hour, 10800 = 3 hours
+
+  integration_time_s: 1.0      # Time averaged per saved spectrum [seconds]
+                               # Lower = more temporal resolution, more data
+                               # Jordan's SDR uses sampleIntegrationTime: 1
+                               # IMPORTANT: discuss minimum with Jordan before
+                               # reducing below 0.5 s (disk I/O bottleneck)
+
+  file_duration_s: 3600        # How often to start a new HDF5 file [seconds]
+                               # Mirrors Jordan's HD5F_FILE_SWITCH_PERIOD
+
+  # ── RFSoC hardware ─────────────────────────────────────────────────────────
+  rfsoc:
+
+    fs_mhz: 4423.680           # ADC sample rate [MHz]
+                               # Nyquist = 2211.84 MHz
+
+    n_channels: 16384          # FFT length (coarse spectrometer)
+                               # t_per_raw_spectrum = n_channels / fs = 3.7 ms
+
+    spectrometer_mode: fft     # "fft" or "pfb"
+                               # Jordan uses pfb for SDR; match here once confirmed
+
+    adc_attenuation_db: 0      # ADC attenuation [dB] — tune to avoid saturation
+
+    fft_window: blackman       # Window applied before FFT
+                               # Options: rectangular, blackman, hann, hamming,
+                               #          blackmanharris
+                               # Jordan uses Blackman for PFB, Rectangular for FFT
+
+    # PFB parameters (only used if spectrometer_mode: pfb)
+    pfb_n_taps: 4              # Number of PFB taps (Jordan uses 4)
+    pfb_window: blackman       # PFB prototype filter window
+
+  # ── Output ─────────────────────────────────────────────────────────────────
+  data_directory: /rhino-rfsoc/data     # Where HDF5 files are saved
+  obs_cache_path: /rhino-rfsoc/cache    # Temporary cache during observation
+  custom_name: ""                        # Optional prefix for output filenames
+                                         # e.g. "load_lna" → load_lna_rfsoc_*.hdf5
+
+  # ── Metadata (written to every HDF5 file) ──────────────────────────────────
+  configuration: "Load + ZKL-2+ LNA"    # Human-readable description
+  notes: ""                              # Any additional notes

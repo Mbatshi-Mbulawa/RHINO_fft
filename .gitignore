@@ -40,4 +40,7 @@ Thumbs.db
 
 # Large outputs
 outputs/*.bit
-outputs/*.hwh
+outputs/*.hwh.DS_Store
+QICK/
+QICK.zip
+*.zip

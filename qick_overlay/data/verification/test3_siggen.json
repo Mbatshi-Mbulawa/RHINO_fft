@@ -1,0 +1,46 @@
+{
+  "tone_results": {
+    "70.0": {
+      "set_freq_mhz": 70.0,
+      "measured_freq_mhz": 69.9975,
+      "freq_error_mhz": 0.0024999999999977263,
+      "freq_error_bins": 0.0740740740740067,
+      "snr_db": 81.24706151111333,
+      "passed": true
+    },
+    "80.0": {
+      "set_freq_mhz": 80.0,
+      "measured_freq_mhz": 79.9875,
+      "freq_error_mhz": 0.012500000000002842,
+      "freq_error_bins": 0.37037037037045456,
+      "snr_db": 72.40184350945842,
+      "passed": true
+    },
+    "88.0": {
+      "set_freq_mhz": 88.0,
+      "measured_freq_mhz": 87.98625,
+      "freq_error_mhz": 0.013750000000001705,
+      "freq_error_bins": 0.4074074074074579,
+      "snr_db": 69.3539342829254,
+      "passed": true
+    },
+    "100.0": {
+      "set_freq_mhz": 100.0,
+      "measured_freq_mhz": 100.00125,
+      "freq_error_mhz": 0.0012499999999988631,
+      "freq_error_bins": 0.03703703703700335,
+      "snr_db": 68.35453429408348,
+      "passed": true
+    },
+    "110.0": {
+      "set_freq_mhz": 110.0,
+      "measured_freq_mhz": 109.99125,
+      "freq_error_mhz": 0.008750000000006253,
+      "freq_error_bins": 0.2592592592594445,
+      "snr_db": 67.27629539944546,
+      "passed": true
+    }
+  },
+  "max_freq_error_bins": 0.4074074074074579,
+  "all_passed": true
+}

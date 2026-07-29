@@ -1,0 +1,12 @@
+{
+  "generator_freq_mhz": 80.0,
+  "generator_power_dbm": -10,
+  "adc_channel": "ADC_C",
+  "n_frames": 200,
+  "noise_floor_db": 46.60765407805216,
+  "peak_freq_mhz": 800.0100000000001,
+  "peak_power_db": 135.04506872955272,
+  "peak_snr_db": 88.43741465150057,
+  "freq_error_mhz": 720.0100000000001,
+  "passed": false
+}
