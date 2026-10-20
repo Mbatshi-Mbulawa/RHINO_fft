@@ -1,0 +1,5 @@
+file,start_utc_pc_clock,carrier,generator_level_dBm,generator_MHz,arm,notes
+base_b1_direct_off_115643.npy,2026-10-20T11:56:43Z,off,none,none,direct arm to board 1 ADC_A with no amplifier,baseline for the three tone captures below
+tone_b1_direct_f70_m60_121022.npy,2026-10-20T12:10:22Z,on (inferred from the tone),-60,69.9975,direct,peak excess 6.519 counts/frame at bin 4148 and 5.059 at the mirror vs the baseline
+tone_b1_direct_f70_m60_repeat_123238.npy,2026-10-20T12:32:38Z,on,-60 (per operator; display not read),69.9975,direct,renamed from m50_123238 because it was taken before the dial was changed; peak excess 6.685
+tone_b1_direct_f70_m50_123809.npy,2026-10-20T12:38:09Z,on,-50 (per operator),69.9975,direct,peak excess 58.526 and mirror 57.430 vs the baseline
