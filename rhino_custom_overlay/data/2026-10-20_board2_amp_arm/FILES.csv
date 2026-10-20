@@ -1,0 +1,10 @@
+file,start_utc_pc_clock,carrier,generator_level_dBm,generator_MHz,amplifier,notes
+b2_amp_off_124510.npy,2026-10-20T12:45:10Z,off,none,none,UNPOWERED,cable partly out of the metal block when taken so suspect
+b2_amp_off2_124843.npy,2026-10-20T12:48:43Z,off,none,none,UNPOWERED,cable reseated; baseline for the unpowered state
+tone_b2_amp_f70_m60_125123.npy,2026-10-20T12:51:23Z,on (assumed),-60 (assumed),69.9975 (assumed),UNPOWERED,display not read back; no tone seen
+b2_ampon_off_125602.npy,2026-10-20T12:56:02Z,off,none,none,POWERED 12 V 0.106 A,floor near 70 MHz about 41 counts/frame and lines at 60.0075 and 80.0044 MHz; this state was gone by 13:17Z
+tone_b2_ampon_f70_m60_125916.npy,2026-10-20T12:59:16Z,on,-60,69.9975,POWERED,no tone; expected only about 0.46 counts/frame
+tone_b2_ampon_f70_m40_130341.npy,2026-10-20T13:03:41Z,on,-40 intended,69.9975,POWERED,expected about 45 counts/frame but only 2.7 seen so level at capture doubtful; do not use for linearity
+tone_b2_ampon_f70_m30_131659.npy,2026-10-20T13:16:59Z,on,-30,69.9975,POWERED,excess 455 counts/frame vs b2_ampon_off2_132211
+tone_b2_ampon_f70_m40b_131944.npy,2026-10-20T13:19:44Z,on,-40,69.9975,POWERED,excess 45.9 counts/frame vs b2_ampon_off2_132211
+b2_ampon_off2_132211.npy,2026-10-20T13:22:11Z,off,none,none,POWERED,baseline for the 13:16 and 13:19 tone captures
